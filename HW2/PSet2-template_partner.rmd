@@ -1,0 +1,330 @@
+---
+author: Mrugank Akarte(mma2247)
+title: "EDAV Fall 2019 PSet 2"
+output: 
+  pdf_document: 
+    fig_height: 3
+    fig_width: 5
+editor_options: 
+  chunk_output_type: console
+---
+
+Read *Graphical Data Analysis with R*, Ch. 4, 5
+
+Grading is based both on your graphs and verbal explanations. Follow all best practices as discussed in class. Data manipulation should not be hard coded. That is, your scripts should be written to work for new data.
+
+```{r setup, include=FALSE}
+ # keep this chunk in your .Rmd file
+ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+    
+### 1. useR2016! survey
+
+[18 points]
+
+Data: `useR2016` dataset in the **forwards** package (available on CRAN)
+
+For parts (a) and (b):
+
+* Do not toss NAs.
+* Do some research to find the wording of the questions asked as relevant and include them in the titles of your graphs.
+* Include the dataset name, package name, and link to the question wording source in the graph caption.
+
+```{r}
+library(forwards)
+library(dplyr)
+library(ggplot2)
+data("useR2016")
+```
+
+
+(a) Create a horizontal bar chart of the responses to Q20.
+```{r}
+useR2016 %>% 
+  mutate(social_media = fct_explicit_na(Q20, na_level = "NA")) %>%
+  ggplot() +
+  geom_bar(mapping = aes(fct_rev(fct_infreq(social_media)), fill = social_media), show.legend = F) + 
+  coord_flip() + 
+  labs(title = 'Social Media', caption = 'Caption', x = "", y = 'Count')
+
+```
+
+
+(b) Create a vertical bar chart of the responses to Q11.
+```{r}
+useR2016 %>% 
+  mutate(social_media = fct_explicit_na(Q11, na_level = "NA")) %>%
+  ggplot() +
+  geom_bar(mapping = aes(social_media, fill = social_media), show.legend = F) + 
+  labs(title = 'Social Media', caption = 'Caption', x = "", y = 'Count')
+
+```
+
+
+(c) Create a horizontal stacked bar chart showing the proportion of respondents for each level of Q11 who are over 35 vs. 35 or under. Use a descriptive title. 
+```{r}
+# Without NAs
+useR2016 %>% 
+  remove_missing(vars = c('Q11', 'Q3'),na.rm = T) %>%
+  ggplot() +
+  geom_bar(mapping = aes(x = Q11, fill = Q3), show.legend = T, position = 'fill') +
+  coord_flip() + 
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = 'Title', caption = 'Caption', x = "", y = 'Proportion')
+
+# With NA included
+useR2016 %>% 
+  ggplot() +
+  geom_bar(mapping = aes(x = Q11, fill = Q3), show.legend = T, position = 'fill') +
+  coord_flip() + 
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = 'Title', caption = 'Caption', x = "", y = 'Proportion')
+
+```
+
+
+(d) Create a horizontal stacked bar chart showing the proportional breakdown of Q11 for each level of Q3, faceted on Q2. Use a descriptive title. 
+```{r}
+useR2016 %>% 
+  remove_missing(vars = c('Q11', 'Q3', 'Q2'),na.rm = T) %>%
+  ggplot() +
+  geom_bar(mapping = aes(x = fct_rev(Q3), fill = Q11), show.legend = T, position = 'fill') +
+  facet_wrap(~Q2) +
+  coord_flip() + 
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = 'Title', caption = 'Caption', x = "", y = 'Proportion')
+
+```
+
+
+(e) For the next part, we will need to be able to add line breaks (`\n`) to long tick mark labels. Write a function that takes a character string and a desired approximate line length in number of characters and substitutes a line break for the first space after every multiple of the specified line length.
+```{r}
+add_new_line <- function(str, len){
+  ctr = 1
+  new = FALSE
+  first = c()
+  last = c()
+  for (char in strsplit(string,"")){
+    print(char)
+    first <- c(first, char)
+    idx = ctr + 1
+    for (i in idx:length(str)){
+      last[i] <- str[i]
+    }
+    if (length(first) >= len){
+      new = TRUE
+    }
+    if (new == TRUE){
+      if (stri_isempty(char)){
+        first <- c(c(), paste(first, last, sep="\n"))
+        last <- c()
+      }
+    ctr = ctr + 1
+    }
+    
+  }
+}
+
+add_new_line('abcdefgh', 5)
+    
+```
+string <- 'abcdefghi'
+string[4]
+
+
+(f) Create a horizontal bar chart that shows the percentage of positive responses for `Q13 - Q13_F`. Use your function from part (e) to add line breaks to the responses. Your graph should have one bar each for `Q13 - Q13_F`.
+
+
+### 2. Rotten Tomatoes
+
+[18 points]
+
+To get the data for this problem, we'll use the **robotstxt** package to check that it's ok to scrape data from Rotten Tomatoes and then use the **rvest** package to get data from the web site.
+```{r}
+library(rvest)
+library(robotstxt)
+```
+
+(a) Use the `paths_allowed()` function from **robotstxt** to make sure it's ok to scrape https://www.rottentomatoes.com/browse/box-office/. Then use **rvest** functions to find relative links to individual movies listed on this page. Finally, paste the base URL to each to create a character vector of URLs.
+```{r}
+paths_allowed(paths = 'https://www.rottentomatoes.com/browse/box-office/')
+
+html <- read_html('https://www.rottentomatoes.com/browse/box-office/')
+
+url <- html_attr(html_nodes(html, ".left a"), "href")
+base_url <- 'https://www.rottentomatoes.com'
+
+vec <- paste0(base_url, url)
+```
+
+
+Display the first six lines of the vector.
+```{r}
+vec[1:6]
+```
+
+(b) Write a function to read the content of one page and pull out the title, tomatometer score and audience score of the film. Then iterate over the vector of all movies using `do.call() / rbind() / lapply()` or `dplyr::bind_rows() / purrr::map()` to create a three column data frame (or tibble).
+```{r}
+
+score_meter_function <- function(links){
+  movie_meter = data.frame(movie = character(), tomato_meter = character(), audience_score = character())
+
+  for(link in links){
+    movie <- read_html(x = link)
+    movie_title <- html_text(html_nodes(movie, ".mop-ratings-wrap__title--top"))
+    score <- html_text(html_nodes(movie, ".mop-ratings-wrap__percentage"))
+    score <-unlist(stringr::str_extract_all(string = score, pattern = '\\d+'))
+    if(is.null(score)){score = c(NA, NA)}
+    df <- data.frame(movie = movie_title, tomato_meter = score[1], audience_score = score[2])
+    movie_meter <- rbind(movie_meter, df)
+  }
+  
+  return(movie_meter)
+}
+movie_meter <- score_meter_function(vec)
+
+```
+
+
+Display the first six lines of your data frame.
+```{r}
+head(movie_meter, 6)
+```
+
+
+(Results will vary depending on when you pull the data.)
+ 
+For help, see this SO post: https://stackoverflow.com/questions/36709184/build-data-frame-from-multiple-rvest-elements
+
+Write your data to file so you don't need to scrape the site each time you need to access it.
+```{r}
+write.csv(movie_meter, 'movie_meter.csv', row.names = F)
+```
+
+(c) Create a Cleveland dot plot of tomatometer scores.
+
+```{r, fig.height=9}
+movie_meter <- read.csv('movie_meter.csv')
+
+ggplot(movie_meter) + 
+  geom_point(
+    aes(y = reorder(movie, tomato_meter), x = tomato_meter), color = 'red') +
+  labs(title = 'Tomato Meter Scores', xlab = 'Tomato Meter', ylab = 'Movie')
+
+```
+
+
+(d) Create a Cleveland dot plot of tomatometer *and* audience scores on the same graph, one color for each. Sort by audience score.
+```{r}
+ggplot(movie_meter) + 
+  geom_point(aes(y = reorder(movie, audience_score), x = audience_score, color = "audience_score")) +
+  geom_point(aes(y = movie, x = tomato_meter, color = "tomato_meter")) +
+  labs(title = 'Tomato Meter Scores', xlab = 'Tomato Meter', ylab = 'Movie') +
+  scale_color_manual(name = "", values = c("audience_score" = "purple", "tomato_meter" = "red")) 
+
+
+
+```
+
+
+```{r}
+#Still need to sort
+library(tidyr)
+movie_meter %>% 
+  gather('Score', 'value', -c(movie)) %>%
+  arra
+  ggplot() + 
+  geom_point(aes(y = reorder(movie, value=='audience_score'), x = value, color = Score)) +
+  labs(title = 'Tomato Meter Scores', xlab = 'Tomato Meter', ylab = 'Movie')
+
+```
+
+
+(e) Run your code again for the weekend of July 5 - July 7, 2019. Use **plotly** to create a scatterplot of audience score vs. tomatometer score with the ability to hover over the point to see the film title.
+
+```{r}
+html2 <- read_html('https://www.rottentomatoes.com/browse/box-office/?rank_id=11&country=us')
+url2 <- html_attr(html_nodes(html2, ".left a"), "href")
+base_url <- 'https://www.rottentomatoes.com'
+
+vec2 <- paste0(base_url, url2)
+movie_meter2 <- score_meter_function(vec2)
+write.csv(movie_meter2, 'movie_meter2.csv', row.names = F)
+
+movie_meter2 <- read.csv('movie_meter2.csv')
+library(plotly)
+g <- ggplot(movie_meter2) + 
+  geom_point(aes(tomato_meter, audience_score, text=movie), show.legend = F)
+
+ggplotly(g, tooltip = "movie")
+```
+
+
+### 3. Weather
+
+[14 points]
+
+Data: `weather` dataset in **nycflights13** package (available on CRAN)
+
+
+For parts (a) - (d) draw four plots of `wind_dir` vs. `humid` as indicated. For all, adjust parameters to the levels that provide the best views of the data.
+```{r}
+library(nycflights13)
+data("weather")
+```
+
+(a) Points with alpha blending
+```{r}
+ggplot(weather) +
+  geom_point(aes(x = wind_dir, y = humid), alpha = 0.05, stroke = 0)
+```
+
+
+(b) Points with alpha blending + density estimate contour lines
+```{r}
+ggplot(weather) +
+  geom_point(aes(x = wind_dir, y = humid), alpha = 0.05, stroke = 0) + 
+  geom_density_2d(aes(x = wind_dir, y = humid, color = 'red'))
+
+```
+
+
+(c) Hexagonal heatmap of bin counts
+```{r}
+ggplot(weather) +
+  geom_hex(aes(x = wind_dir, y = humid)) + 
+  scale_fill_continuous(low = 'orange', high = 'red')
+
+```
+
+(d) Square heatmap of bin counts 
+```{r}
+ggplot(weather) +
+  geom_bin2d(aes(x = wind_dir, y = humid)) + 
+  scale_fill_continuous(low = 'grey', high = 'dark red')
+```
+
+(e) Describe noteworthy features of the data, using the "Movie ratings" example on page 82 (last page of Section 5.3) as a guide.  
+
+(f) Draw a scatterplot of `humid` vs. `temp`. Why does the plot have diagonal lines?
+
+```{r}
+ggplot(weather) + 
+  geom_point(aes(x = temp, y = humid))
+```
+
+
+(g) Draw a scatterplot matrix of the continuous variables in the `weather` dataset. Which pairs of variables are strongly positively associated and which are strongly negatively associated?
+
+```{r}
+pairs(weather[,c('temp', 'dewp', 'humid', 'wind_speed', 'wind_gust', 'pressure')])
+```
+
+
+(h) Color the points by `origin`.  Do any new patterns emerge?
+```{r}
+
+```
+
+
+
